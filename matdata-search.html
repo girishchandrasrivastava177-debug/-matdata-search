@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="hi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>मतदाता सूची खोज</title>
+<style>
+:root{--navy:#14345b;--blue:#1d5fa7;--pale:#f2f6fb;--ink:#182536}
+*{box-sizing:border-box}body{margin:0;background:var(--pale);font-family:Arial,"Noto Sans Devanagari",sans-serif;color:var(--ink)}
+header{background:linear-gradient(135deg,#14345b,#2374b9);color:#fff;padding:28px 16px;text-align:center}
+header h1{margin:0 0 8px;font-size:clamp(22px,5vw,32px)}header p{margin:0;opacity:.92}
+main{max-width:780px;margin:22px auto;padding:0 14px}
+.card{background:#fff;border-radius:16px;padding:20px;margin-bottom:16px;box-shadow:0 5px 20px #17385b12}
+.candidate{border-left:5px solid #d6a33c}
+h2{font-size:19px;margin:0 0 12px}.candidate strong{font-size:20px}
+input[type="search"],input[type="file"]{width:100%;padding:13px;border:1px solid #c9d4e2;border-radius:10px;font-size:16px;margin:8px 0}
+button{background:var(--blue);color:white;border:0;border-radius:10px;padding:12px 16px;font-size:15px;cursor:pointer}
+.hint{font-size:13px;color:#586779;line-height:1.5}
+.result{border:1px solid #dbe5f0;border-radius:10px;padding:14px;margin-top:10px}
+.result p{margin:6px 0}.status{padding:12px;background:#fff8e7;border-radius:10px;color:#755313;line-height:1.5}
+footer{text-align:center;color:#657386;padding:16px;font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <h1>मतदाता सूची खोज</h1>
+  <p>वाराणसी मंडल स्नातक निर्वाचन क्षेत्र</p>
+</header>
+<main>
+  <section class="card candidate">
+    <h2>उम्मीदवार की जानकारी</h2>
+    <strong>राकेश कुमार श्रीवास्तव</strong>
+    <p>सीरियल नंबर: <b>20</b> <span class="hint">(उपयोगकर्ता द्वारा दी गई जानकारी; आधिकारिक पुष्टि बाकी)</span></p>
+  </section>
+  <section class="card">
+    <h2>मतदाता का नाम खोजें</h2>
+    <label for="q">नाम, पिता/पति का नाम या सीरियल नंबर</label>
+    <input id="q" type="search" placeholder="यहाँ जानकारी लिखें…" autocomplete="off">
+    <button id="searchBtn">खोजें</button>
+    <div id="results" aria-live="polite"></div>
+  </section>
+  <section class="card">
+    <h2>मतदाता सूची का डेटा जोड़ें</h2>
+    <p class="hint">यह पेज अभी वास्तविक मतदाता सूची से जुड़ा नहीं है। खोज चालू करने के लिए CSV फ़ाइल चुनें। CSV में ये कॉलम रखें: <b>name, serial, relative, polling_station</b>. रिकॉर्ड केवल चुने गए ब्राउज़र में खोजे जाएंगे; फाइल किसी सर्वर पर अपलोड नहीं होती।</p>
+    <input id="csvFile" type="file" accept=".csv,text/csv">
+    <div id="loadStatus" class="status">अभी कोई मतदाता डेटा लोड नहीं है। बिना डेटा के खोज परिणाम नहीं दिखेंगे।</div>
+  </section>
+  <p class="hint">यह एक स्वतंत्र खोज-पेज का प्रारूप है, सरकारी वेबसाइट नहीं। आधिकारिक जानकारी के लिए संबंधित निर्वाचन अधिकारी की प्रकाशित मतदाता सूची से मिलान करें।</p>
+</main>
+<footer>मतदाता सूची खोज पेज • डेटा की पुष्टि आधिकारिक सूची से करें</footer>
+<script>
+let rows=[];
+const norm=s=>(s??"").toString().normalize("NFC").toLocaleLowerCase("hi").trim();
+function parseCSV(text){
+  const lines=text.replace(/^\uFEFF/,"").split(/\r?\n/).filter(x=>x.trim());
+  if(!lines.length)return [];
+  function split(line){let out=[],v="",quoted=false;for(let i=0;i<line.length;i++){const c=line[i];if(c==='"'&&line[i+1]==='"'&&quoted){v+='"';i++;}else if(c==='"'){quoted=!quoted;}else if(c===","&&!quoted){out.push(v.trim());v="";}else v+=c;}out.push(v.trim());return out;}
+  const headers=split(lines[0]).map(norm);
+  const aliases={name:["name","नाम","मतदाता का नाम"],serial:["serial","serial no","serial_number","क्रम संख्या","सीरियल नंबर"],relative:["relative","father_name","पति/पिता का नाम","पिता का नाम","सम्बन्धी"],polling_station:["polling_station","booth","मतदान केंद्र","भाग संख्या"]};
+  const index={};for(const key in aliases)index[key]=headers.findIndex(h=>aliases[key].includes(h));
+  if(index.name<0||index.serial<0)throw new Error("CSV में name/नाम और serial/क्रम संख्या कॉलम होना चाहिए।");
+  return lines.slice(1).map(line=>{const a=split(line);return {name:a[index.name]||"",serial:a[index.serial]||"",relative:index.relative>=0?a[index.relative]||"": "",polling_station:index.polling_station>=0?a[index.polling_station]||"":""};}).filter(r=>r.name||r.serial);
+}
+function search(){
+ const q=norm(document.getElementById("q").value), box=document.getElementById("results");box.innerHTML="";
+ if(!rows.length){box.innerHTML='<div class="status">पहले सत्यापित मतदाता सूची की CSV फ़ाइल लोड करें।</div>';return;}
+ if(!q){box.innerHTML='<p class="hint">खोजने के लिए नाम या सीरियल नंबर लिखें।</p>';return;}
+ const found=rows.filter(r=>[r.name,r.serial,r.relative,r.polling_station].some(v=>norm(v).includes(q))).slice(0,50);
+ if(!found.length){box.innerHTML="<p>कोई मेल खाता रिकॉर्ड नहीं मिला। वर्तनी जाँचें या आधिकारिक सूची देखें।</p>";return;}
+ found.forEach(r=>{const d=document.createElement("div");d.className="result";const fields=[["नाम",r.name],["सीरियल नंबर",r.serial],["पिता/पति का नाम",r.relative],["मतदान केंद्र",r.polling_station]];fields.forEach(([label,value])=>{if(value){const p=document.createElement("p"),b=document.createElement("b");b.textContent=label+": ";p.append(b,document.createTextNode(value));d.appendChild(p);}});box.appendChild(d);});
+}
+document.getElementById("searchBtn").addEventListener("click",search);
+document.getElementById("q").addEventListener("keydown",e=>{if(e.key==="Enter")search();});
+document.getElementById("csvFile").addEventListener("change",async e=>{const f=e.target.files[0];if(!f)return;try{rows=parseCSV(await f.text());document.getElementById("loadStatus").textContent=rows.length+" रिकॉर्ड लोड हुए। अब ऊपर नाम या सीरियल नंबर खोजें।";search();}catch(err){rows=[];document.getElementById("loadStatus").textContent=err.message;}});
+</script>
+</body>
+</html>
